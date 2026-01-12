@@ -22,6 +22,16 @@ describe('BrowserManager', () => {
       const page = browser.getPage();
       expect(page).toBeDefined();
     });
+
+    it('should reject invalid executablePath', async () => {
+      const testBrowser = new BrowserManager();
+      await expect(
+        testBrowser.launch({
+          headless: true,
+          executablePath: '/nonexistent/path/to/chromium',
+        })
+      ).rejects.toThrow();
+    });
   });
 
   describe('navigation', () => {
