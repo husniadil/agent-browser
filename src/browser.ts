@@ -661,7 +661,9 @@ export class BrowserManager {
       this.isPersistentContext = true;
     } else if (hasProfile) {
       // Profile uses persistent context for durable cookies/storage
-      context = await launcher.launchPersistentContext(options.profile!, {
+      // Expand ~ to home directory since it won't be shell-expanded
+      const profilePath = options.profile!.replace(/^~\//, os.homedir() + '/');
+      context = await launcher.launchPersistentContext(profilePath, {
         headless: options.headless ?? true,
         executablePath: options.executablePath,
         viewport,
