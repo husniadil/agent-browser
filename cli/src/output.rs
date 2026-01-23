@@ -1535,6 +1535,7 @@ Options:
                              e.g., --proxy "http://user:pass@127.0.0.1:7890"
   --proxy-bypass <hosts>     Bypass proxy for these hosts (or AGENT_BROWSER_PROXY_BYPASS)
                              e.g., --proxy-bypass "localhost,*.internal.com"
+  -p, --provider <name>      Cloud browser provider (or AGENT_BROWSER_PROVIDER env)
   --json                     JSON output
   --full, -f                 Full page screenshot
   --headed                   Show browser window (not headless)
@@ -1545,6 +1546,7 @@ Options:
 Environment:
   AGENT_BROWSER_SESSION          Session name (default: "default")
   AGENT_BROWSER_EXECUTABLE_PATH  Custom browser executable path
+  AGENT_BROWSER_PROVIDER         Cloud browser provider
   AGENT_BROWSER_STREAM_PORT      Enable WebSocket streaming on port (e.g., 9223)
 
 Examples:
