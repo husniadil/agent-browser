@@ -148,8 +148,9 @@ jobs:
           # Pack the package
           npm pack
           
-          # Install globally from the tarball
-          npm install -g agent-browser-*.tgz
+          # Install globally from the tarball (use Get-Item since PowerShell doesn't expand globs)
+          $tarball = (Get-Item agent-browser-*.tgz).Name
+          npm install -g $tarball
           
           # Test that the npm-generated shims work
           # This is what fails with "/bin/sh not found" before the fix

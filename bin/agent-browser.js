@@ -2,7 +2,10 @@
 
 /**
  * Cross-platform CLI wrapper for agent-browser
- * Detects OS/arch and executes the appropriate native binary
+ * 
+ * This wrapper enables npx support on Windows where shell scripts don't work.
+ * For global installs, postinstall.js patches the shims to invoke the native
+ * binary directly (zero overhead).
  */
 
 import { spawn } from 'child_process';
