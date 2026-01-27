@@ -143,6 +143,19 @@ jobs:
           bin\agent-browser.cmd --version
         shell: cmd
 
+      - name: Test npm global install (reproduces issue #262)
+        run: |
+          # Pack the package
+          npm pack
+          
+          # Install globally from the tarball
+          npm install -g agent-browser-*.tgz
+          
+          # Test that the npm-generated shims work
+          # This is what fails with "/bin/sh not found" before the fix
+          agent-browser --version
+        shell: pwsh
+
       - name: Test agent-browser install command
         run: |
           $env:PATH = "$pwd\bin;$env:PATH"
