@@ -1108,6 +1108,7 @@ fn parse_set(rest: &[&str], id: &str) -> Result<Value, ParseError> {
         "device",
         "geo",
         "geolocation",
+        "permissions",
         "offline",
         "headers",
         "credentials",
@@ -1169,6 +1170,32 @@ fn parse_set(rest: &[&str], id: &str) -> Result<Value, ParseError> {
                 })?;
             Ok(json!({ "id": id, "action": "geolocation", "latitude": lat, "longitude": lng }))
         }
+        Some("permissions") => {
+            // Parse permissions: set permissions <permission1> [permission2] ... [--clear]
+            // Example: set permissions geolocation notifications
+            // Example: set permissions --clear (to clear all permissions)
+            let clear = rest.iter().any(|&s| s == "--clear");
+
+            if clear {
+                Ok(json!({ "id": id, "action": "permissions", "permissions": [], "grant": false }))
+            } else {
+                // Collect all permission names (skip "permissions" itself and any flags)
+                let permissions: Vec<&str> = rest[1..]
+                    .iter()
+                    .filter(|&&s| !s.starts_with("--"))
+                    .map(|&s| s)
+                    .collect();
+
+                if permissions.is_empty() {
+                    return Err(ParseError::MissingArguments {
+                        context: "set permissions".to_string(),
+                        usage: "set permissions <permission1> [permission2] ... or set permissions --clear",
+                    });
+                }
+
+                Ok(json!({ "id": id, "action": "permissions", "permissions": permissions, "grant": true }))
+            }
+        }
         Some("offline") => {
             let off = rest
                 .get(1)
@@ -1223,7 +1250,7 @@ fn parse_set(rest: &[&str], id: &str) -> Result<Value, ParseError> {
         }),
         None => Err(ParseError::MissingArguments {
             context: "set".to_string(),
-            usage: "set <viewport|device|geo|offline|headers|credentials|media> [args...]",
+            usage: "set <viewport|device|geo|permissions|offline|headers|credentials|media> [args...]",
         }),
     }
 }
@@ -1340,6 +1367,7 @@ mod tests {
             user_agent: None,
             provider: None,
             ignore_https_errors: false,
+            stealth: false,
         }
     }
 

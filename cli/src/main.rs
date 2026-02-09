@@ -207,6 +207,7 @@ fn main() {
         flags.ignore_https_errors,
         flags.profile.as_deref(),
         flags.state.as_deref(),
+        flags.stealth,
     ) {
         Ok(result) => result,
         Err(e) => {
@@ -390,7 +391,8 @@ fn main() {
         || flags.state.is_some()
         || flags.proxy.is_some()
         || flags.args.is_some()
-        || flags.user_agent.is_some())
+        || flags.user_agent.is_some()
+        || flags.stealth)
         && flags.cdp.is_none()
         && flags.provider.is_none()
     {
@@ -440,7 +442,11 @@ fn main() {
         }
 
         if flags.ignore_https_errors {
-            launch_cmd["ignoreHTTPSErrors"] = json!(true);
+            cmd_obj.insert("ignoreHTTPSErrors".to_string(), json!(true));
+        }
+
+        if flags.stealth {
+            cmd_obj.insert("stealth".to_string(), json!(true));
         }
 
         if let Err(e) = send_command(launch_cmd, &flags.session) {

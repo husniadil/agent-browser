@@ -1078,6 +1078,14 @@ export class BrowserManager {
       browserType === 'firefox' ? firefox : browserType === 'webkit' ? webkit : chromium;
     const viewport = options.viewport ?? { width: 1280, height: 720 };
 
+    // Stealth mode: add browser args to disable automation detection
+    const stealthArgs = options.stealth ? ['--disable-blink-features=AutomationControlled'] : [];
+    const mergedArgs = options.args
+      ? [...options.args, ...stealthArgs]
+      : stealthArgs.length > 0
+        ? stealthArgs
+        : undefined;
+
     let context: BrowserContext;
     if (hasExtensions) {
       // Extensions require persistent context in a temp directory
@@ -1085,7 +1093,7 @@ export class BrowserManager {
       const session = process.env.AGENT_BROWSER_SESSION || 'default';
       // Combine extension args with custom args
       const extArgs = [`--disable-extensions-except=${extPaths}`, `--load-extension=${extPaths}`];
-      const allArgs = options.args ? [...extArgs, ...options.args] : extArgs;
+      const allArgs = mergedArgs ? [...extArgs, ...mergedArgs] : extArgs;
       context = await launcher.launchPersistentContext(
         path.join(os.tmpdir(), `agent-browser-ext-${session}`),
         {
@@ -1107,6 +1115,7 @@ export class BrowserManager {
       context = await launcher.launchPersistentContext(profilePath, {
         headless: options.headless ?? true,
         executablePath: options.executablePath,
+        args: mergedArgs,
         viewport,
         extraHTTPHeaders: options.headers,
       });
@@ -1116,7 +1125,7 @@ export class BrowserManager {
       this.browser = await launcher.launch({
         headless: options.headless ?? true,
         executablePath: options.executablePath,
-        args: options.args,
+        args: mergedArgs,
       });
       this.cdpEndpoint = null;
       context = await this.browser.newContext({
@@ -1127,6 +1136,11 @@ export class BrowserManager {
         ignoreHTTPSErrors: options.ignoreHTTPSErrors ?? false,
         ...(options.storageState && { storageState: options.storageState }),
       });
+    }
+
+    // Stealth mode: inject evasion scripts to hide automation signals
+    if (options.stealth) {
+      await this.applyStealthEvasions(context);
     }
 
     context.setDefaultTimeout(60000);
@@ -1140,6 +1154,107 @@ export class BrowserManager {
       this.setupPageTracking(page);
     }
     this.activePageIndex = this.pages.length > 0 ? this.pages.length - 1 : 0;
+  }
+
+  /**
+   * Apply stealth evasion scripts to a browser context to hide automation signals.
+   * Based on techniques from playwright-stealth / puppeteer-extra-plugin-stealth.
+   */
+  private async applyStealthEvasions(context: BrowserContext): Promise<void> {
+    // Use string-based script to avoid TypeScript DOM type issues
+    await context.addInitScript(`
+      // 1. Hide navigator.webdriver
+      Object.defineProperty(navigator, 'webdriver', {
+        get: () => false,
+        configurable: true,
+      });
+
+      // 2. Fix Chrome runtime — automation-controlled browsers lack window.chrome
+      if (!window.chrome) {
+        window.chrome = {
+          runtime: {
+            onConnect: { addListener: function(){}, removeListener: function(){} },
+            onMessage: { addListener: function(){}, removeListener: function(){} },
+            connect: function(){},
+            sendMessage: function(){},
+          },
+          loadTimes: function(){ return {}; },
+          csi: function(){ return {}; },
+        };
+      }
+
+      // 3. Fix permissions API to not reveal automation
+      if (typeof Permissions !== 'undefined' && Permissions.prototype.query) {
+        var originalQuery = Permissions.prototype.query;
+        Permissions.prototype.query = function(parameters) {
+          if (parameters.name === 'notifications') {
+            return Promise.resolve({
+              state: Notification.permission,
+              name: parameters.name,
+              onchange: null,
+              addEventListener: function(){},
+              removeEventListener: function(){},
+              dispatchEvent: function(){ return true; },
+            });
+          }
+          return originalQuery.call(this, parameters);
+        };
+      }
+
+      // 4. Fix plugins array — headless Chrome has empty plugins
+      Object.defineProperty(navigator, 'plugins', {
+        get: function() {
+          var pluginData = [
+            { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+            { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
+            { name: 'Native Client', filename: 'internal-nacl-plugin', description: '' },
+          ];
+          var arr = [];
+          for (var i = 0; i < pluginData.length; i++) {
+            arr.push(pluginData[i]);
+          }
+          arr.item = function(idx) { return this[idx] || null; };
+          arr.namedItem = function(name) {
+            for (var j = 0; j < this.length; j++) {
+              if (this[j].name === name) return this[j];
+            }
+            return null;
+          };
+          arr.refresh = function(){};
+          return arr;
+        },
+        configurable: true,
+      });
+
+      // 5. Fix languages — ensure realistic values
+      Object.defineProperty(navigator, 'languages', {
+        get: function() { return ['en-US', 'en']; },
+        configurable: true,
+      });
+
+      // 6. Patch Notification.permission to avoid detection
+      if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
+        Object.defineProperty(Notification, 'permission', {
+          get: function() { return 'default'; },
+          configurable: true,
+        });
+      }
+
+      // 7. Fix navigator.connection (missing in some automation contexts)
+      if (!navigator.connection) {
+        Object.defineProperty(navigator, 'connection', {
+          get: function() {
+            return {
+              effectiveType: '4g',
+              rtt: 50,
+              downlink: 10,
+              saveData: false,
+            };
+          },
+          configurable: true,
+        });
+      }
+    `);
   }
 
   /**

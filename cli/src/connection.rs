@@ -197,6 +197,7 @@ pub fn ensure_daemon(
     ignore_https_errors: bool,
     profile: Option<&str>,
     state: Option<&str>,
+    stealth: bool,
 ) -> Result<DaemonResult, String> {
     if is_daemon_running(session) && daemon_ready(session) {
         return Ok(DaemonResult {
@@ -276,6 +277,10 @@ pub fn ensure_daemon(
             cmd.env("AGENT_BROWSER_IGNORE_HTTPS_ERRORS", "1");
         }
 
+        if stealth {
+            cmd.env("AGENT_BROWSER_STEALTH", "1");
+        }
+
         if let Some(prof) = profile {
             cmd.env("AGENT_BROWSER_PROFILE", prof);
         }
@@ -341,6 +346,10 @@ pub fn ensure_daemon(
 
         if ignore_https_errors {
             cmd.env("AGENT_BROWSER_IGNORE_HTTPS_ERRORS", "1");
+        }
+
+        if stealth {
+            cmd.env("AGENT_BROWSER_STEALTH", "1");
         }
 
         if let Some(prof) = profile {

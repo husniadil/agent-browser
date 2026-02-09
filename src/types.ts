@@ -29,6 +29,7 @@ export interface LaunchCommand extends BaseCommand {
   userAgent?: string;
   provider?: string;
   ignoreHTTPSErrors?: boolean;
+  stealth?: boolean;
 }
 
 export interface NavigateCommand extends BaseCommand {

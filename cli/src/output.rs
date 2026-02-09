@@ -1063,11 +1063,18 @@ Settings:
   viewport <w> <h>           Set viewport size
   device <name>              Emulate device (e.g., "iPhone 12")
   geo <lat> <lng>            Set geolocation
+  permissions <p1> [p2] ...  Grant browser permissions
+  permissions --clear        Clear all granted permissions
   offline [on|off]           Toggle offline mode
   headers <json>             Set extra HTTP headers
   credentials <user> <pass>  Set HTTP authentication
   media [dark|light]         Set color scheme preference
         [reduced-motion]     Enable reduced motion
+
+Available Permissions:
+  geolocation, notifications, camera, microphone, clipboard-read,
+  clipboard-write, payment-handler, midi, midi-sysex, ambient-light-sensor,
+  accelerometer, gyroscope, magnetometer, background-sync
 
 Global Options:
   --json               Output as JSON
@@ -1077,6 +1084,9 @@ Examples:
   agent-browser set viewport 1920 1080
   agent-browser set device "iPhone 12"
   agent-browser set geo 37.7749 -122.4194
+  agent-browser set permissions geolocation
+  agent-browser set permissions geolocation notifications camera
+  agent-browser set permissions --clear
   agent-browser set offline on
   agent-browser set headers '{"X-Custom": "value"}'
   agent-browser set credentials admin secret123
@@ -1596,7 +1606,7 @@ Mouse:  agent-browser mouse <action> [args]
   move <x> <y>, down [btn], up [btn], wheel <dy> [dx]
 
 Browser Settings:  agent-browser set <setting> [value]
-  viewport <w> <h>, device <name>, geo <lat> <lng>
+  viewport <w> <h>, device <name>, geo <lat> <lng>, permissions <p...>
   offline [on|off], headers <json>, credentials <user> <pass>
   media [dark|light] [reduced-motion]
 

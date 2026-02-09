@@ -265,6 +265,7 @@ export async function startDaemon(options?: { streamPort?: number }): Promise<vo
               : undefined;
 
             const ignoreHTTPSErrors = process.env.AGENT_BROWSER_IGNORE_HTTPS_ERRORS === '1';
+            const stealth = process.env.AGENT_BROWSER_STEALTH === '1';
             await browser.launch({
               id: 'auto',
               action: 'launch' as const,
@@ -277,6 +278,7 @@ export async function startDaemon(options?: { streamPort?: number }): Promise<vo
               userAgent: process.env.AGENT_BROWSER_USER_AGENT,
               proxy,
               ignoreHTTPSErrors: ignoreHTTPSErrors,
+              stealth: stealth,
             });
           }
 
