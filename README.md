@@ -1,32 +1,20 @@
 # agent-browser
 
-Headless browser automation CLI for AI agents. Fast Rust CLI with Node.js fallback.
+Headless browser automation CLI for AI agents. Fast Rust CLI with Node.js daemon.
+
+> **Fork of [vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser)** with added stealth mode for anti-bot detection evasion.
 
 ## Installation
-
-### npm (recommended)
-
-```bash
-npm install -g agent-browser
-agent-browser install  # Download Chromium
-```
-
-### Homebrew (macOS)
-
-```bash
-brew install agent-browser
-agent-browser install  # Download Chromium
-```
 
 ### From Source
 
 ```bash
-git clone https://github.com/vercel-labs/agent-browser
+git clone https://github.com/husniadil/agent-browser
 cd agent-browser
 pnpm install
 pnpm build
 pnpm build:native   # Requires Rust (https://rustup.rs)
-pnpm link --global  # Makes agent-browser available globally
+pnpm link --global   # Makes agent-browser available globally
 agent-browser install
 ```
 
@@ -58,6 +46,98 @@ agent-browser click "#submit"
 agent-browser fill "#email" "test@example.com"
 agent-browser find role button click --name "Submit"
 ```
+
+## Anti-Detection Guide
+
+agent-browser offers multiple stealth levels depending on how aggressive the target site's bot detection is.
+
+### Level 1: Default (Headless)
+
+Basic headless Chromium via Playwright. No stealth measures. Suitable for simple scraping and testing.
+
+```bash
+agent-browser open example.com
+```
+
+**Detected by:** User Agent (contains "Headless"), WebDriver flag, missing Chrome object, Permissions API, Plugins, Languages, WebGL.
+
+### Level 2: Stealth Mode (Headless)
+
+Enables init scripts that patch common automation signals. Hides Chrome runtime, fixes Permissions API, injects fake plugins, and normalizes languages.
+
+```bash
+agent-browser --stealth open example.com
+# Or via environment variable
+AGENT_BROWSER_STEALTH=1 agent-browser open example.com
+```
+
+**What it fixes:** Chrome object, Permissions API, Plugins Length, Languages, WebDriver Advanced.
+**Still detected:** User Agent (Headless), WebDriver (prototype check), PluginArray type, WebGL (no GPU).
+
+### Level 3: Headed + Stealth
+
+Runs a visible browser window. Exposes real GPU (WebGL), removes "Headless" from User Agent, combined with stealth patches.
+
+```bash
+agent-browser --stealth --headed open example.com
+```
+
+**What it fixes:** Everything from Level 2, plus User Agent, WebGL Vendor/Renderer (real GPU).
+**Still detected:** WebDriver (deep prototype check), PluginArray type.
+
+### Level 4: CDP with Real Chrome (Headed)
+
+Connect to a real Google Chrome instance via Chrome DevTools Protocol. Bypasses ALL Playwright/Chromium-for-Testing fingerprints.
+
+```bash
+# 1. Launch Chrome with debugging port
+google-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-debug
+
+# 2. Connect agent-browser
+agent-browser --cdp http://127.0.0.1:9222 open example.com
+```
+
+**Result:** 100% pass on bot.sannysoft.com. All tests green including WebDriver and PluginArray type.
+
+### Level 5: CDP Headless + UA Override (Best)
+
+The ultimate configuration: real Chrome in headless mode with User-Agent override. Completely undetectable while fully headless.
+
+```bash
+# 1. Launch Chrome headless with clean UA
+google-chrome --headless=new \
+  --remote-debugging-port=9222 \
+  --user-data-dir=/tmp/chrome-debug \
+  --user-agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+# 2. Connect agent-browser
+agent-browser --cdp http://127.0.0.1:9222 open example.com
+```
+
+**Result:** 100% pass. Headless + undetectable. WebGL still reports real GPU hardware.
+
+### Comparison Table
+
+| Test | L1 Default | L2 Stealth | L3 Headed | L4 CDP | L5 CDP Headless |
+|------|:---:|:---:|:---:|:---:|:---:|
+| User Agent | :x: | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| WebDriver | :x: | :x: | :x: | :white_check_mark: | :white_check_mark: |
+| WebDriver Advanced | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| Chrome object | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| Permissions | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| Plugins Length | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| PluginArray type | :x: | :x: | :x: | :white_check_mark: | :white_check_mark: |
+| Languages | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| WebGL Vendor | :x: | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| WebGL Renderer | :x: | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+
+_Tested on [bot.sannysoft.com](https://bot.sannysoft.com)_
+
+### Tips
+
+- **`--user-data-dir` is required** when launching Chrome for CDP. Without it, Chrome may fail to bind the debugging port if another Chrome instance is running.
+- **Match the User-Agent** to the actual Chrome version installed. Check with: `curl -s http://127.0.0.1:9222/json/version | jq .UserAgent`
+- **Level 2 (stealth) is sufficient** for most websites. Only escalate to CDP for sites with aggressive bot detection (Cloudflare, reCAPTCHA v3, DataDome).
 
 ## Commands
 
@@ -164,6 +244,7 @@ agent-browser mouse wheel <dy> [dx]   # Scroll wheel
 agent-browser set viewport <w> <h>    # Set viewport size
 agent-browser set device <name>       # Emulate device ("iPhone 14")
 agent-browser set geo <lat> <lng>     # Set geolocation
+agent-browser set permissions <perm>  # Grant permissions (geolocation, etc.)
 agent-browser set offline [on|off]    # Toggle offline mode
 agent-browser set headers <json>      # Extra HTTP headers
 agent-browser set credentials <u> <p> # HTTP basic auth
@@ -263,10 +344,6 @@ AGENT_BROWSER_SESSION=agent1 agent-browser click "#btn"
 
 # List active sessions
 agent-browser session list
-# Output:
-# Active sessions:
-# -> default
-#    agent1
 
 # Show current session
 agent-browser session
@@ -344,6 +421,7 @@ The `-C` flag is useful for modern web apps that use custom clickable elements (
 | `--name, -n` | Locator name filter |
 | `--exact` | Exact text match |
 | `--headed` | Show browser window (not headless) |
+| `--stealth` | Enable stealth mode to evade bot detection (or `AGENT_BROWSER_STEALTH=1` env) |
 | `--cdp <port>` | Connect via Chrome DevTools Protocol |
 | `--ignore-https-errors` | Ignore HTTPS certificate errors (useful for self-signed certs) |
 | `--allow-file-access` | Allow file:// URLs to access local files (Chromium only) |
@@ -530,7 +608,8 @@ The `--allow-file-access` flag adds Chromium flags (`--allow-file-access-from-fi
 Connect to an existing browser via Chrome DevTools Protocol:
 
 ```bash
-# Start Chrome with: google-chrome --remote-debugging-port=9222
+# Start Chrome with debugging port
+google-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-debug
 
 # Connect once, then run commands without --cdp
 agent-browser connect 9222
@@ -554,6 +633,8 @@ This enables control of:
 - Chrome/Chromium instances with remote debugging
 - WebView2 applications
 - Any browser exposing a CDP endpoint
+
+**Tip:** CDP with real Chrome provides the best anti-detection results. See the [Anti-Detection Guide](#anti-detection-guide) for details.
 
 ## Streaming (Browser Preview)
 
@@ -701,7 +782,7 @@ The `--help` output is comprehensive and most agents can figure it out from ther
 Add the skill to your AI coding assistant for richer context:
 
 ```bash
-npx skills add vercel-labs/agent-browser
+npx skills add husniadil/agent-browser
 ```
 
 This works with Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, Goose, OpenCode, and Windsurf.
@@ -720,6 +801,8 @@ Core workflow:
 2. `agent-browser snapshot -i` - Get interactive elements with refs (@e1, @e2)
 3. `agent-browser click @e1` / `fill @e2 "text"` - Interact using refs
 4. Re-snapshot after page changes
+
+For sites with bot detection, use `--stealth` flag or CDP mode with real Chrome.
 ```
 
 ## Integrations
@@ -777,50 +860,9 @@ agent-browser open https://example.com
 
 **Note:** The iOS provider boots the simulator, starts Appium, and controls Safari. First launch takes ~30-60 seconds; subsequent commands are fast.
 
-#### Real Device Support
-
-Appium also supports real iOS devices connected via USB. This requires additional one-time setup:
-
-**1. Get your device UDID:**
-```bash
-xcrun xctrace list devices
-# or
-system_profiler SPUSBDataType | grep -A 5 "iPhone\|iPad"
-```
-
-**2. Sign WebDriverAgent (one-time):**
-```bash
-# Open the WebDriverAgent Xcode project
-cd ~/.appium/node_modules/appium-xcuitest-driver/node_modules/appium-webdriveragent
-open WebDriverAgent.xcodeproj
-```
-
-In Xcode:
-- Select the `WebDriverAgentRunner` target
-- Go to Signing & Capabilities
-- Select your Team (requires Apple Developer account, free tier works)
-- Let Xcode manage signing automatically
-
-**3. Use with agent-browser:**
-```bash
-# Connect device via USB, then:
-agent-browser -p ios --device "<DEVICE_UDID>" open https://example.com
-
-# Or use the device name if unique
-agent-browser -p ios --device "John's iPhone" open https://example.com
-```
-
-**Real device notes:**
-- First run installs WebDriverAgent to the device (may require Trust prompt)
-- Device must be unlocked and connected via USB
-- Slightly slower initial connection than simulator
-- Tests against real Safari performance and behavior
-
 ### Browserbase
 
 [Browserbase](https://browserbase.com) provides remote browser infrastructure to make deployment of agentic browsing agents easy. Use it when running the agent-browser CLI in an environment where a local browser isn't feasible.
-
-To enable Browserbase, use the `-p` flag:
 
 ```bash
 export BROWSERBASE_API_KEY="your-api-key"
@@ -828,75 +870,29 @@ export BROWSERBASE_PROJECT_ID="your-project-id"
 agent-browser -p browserbase open https://example.com
 ```
 
-Or use environment variables for CI/scripts:
-
-```bash
-export AGENT_BROWSER_PROVIDER=browserbase
-export BROWSERBASE_API_KEY="your-api-key"
-export BROWSERBASE_PROJECT_ID="your-project-id"
-agent-browser open https://example.com
-```
-
-When enabled, agent-browser connects to a Browserbase session instead of launching a local browser. All commands work identically.
-
-Get your API key and project ID from the [Browserbase Dashboard](https://browserbase.com/overview).
-
 ### Browser Use
 
-[Browser Use](https://browser-use.com) provides cloud browser infrastructure for AI agents. Use it when running agent-browser in environments where a local browser isn't available (serverless, CI/CD, etc.).
-
-To enable Browser Use, use the `-p` flag:
+[Browser Use](https://browser-use.com) provides cloud browser infrastructure for AI agents.
 
 ```bash
 export BROWSER_USE_API_KEY="your-api-key"
 agent-browser -p browseruse open https://example.com
 ```
 
-Or use environment variables for CI/scripts:
-
-```bash
-export AGENT_BROWSER_PROVIDER=browseruse
-export BROWSER_USE_API_KEY="your-api-key"
-agent-browser open https://example.com
-```
-
-When enabled, agent-browser connects to a Browser Use cloud session instead of launching a local browser. All commands work identically.
-
-Get your API key from the [Browser Use Cloud Dashboard](https://cloud.browser-use.com/settings?tab=api-keys). Free credits are available to get started, with pay-as-you-go pricing after.
-
 ### Kernel
 
-[Kernel](https://www.kernel.sh) provides cloud browser infrastructure for AI agents with features like stealth mode and persistent profiles.
-
-To enable Kernel, use the `-p` flag:
+[Kernel](https://www.kernel.sh) provides cloud browser infrastructure with stealth mode and persistent profiles.
 
 ```bash
 export KERNEL_API_KEY="your-api-key"
 agent-browser -p kernel open https://example.com
 ```
 
-Or use environment variables for CI/scripts:
+## Upstream
 
-```bash
-export AGENT_BROWSER_PROVIDER=kernel
-export KERNEL_API_KEY="your-api-key"
-agent-browser open https://example.com
-```
-
-Optional configuration via environment variables:
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `KERNEL_HEADLESS` | Run browser in headless mode (`true`/`false`) | `false` |
-| `KERNEL_STEALTH` | Enable stealth mode to avoid bot detection (`true`/`false`) | `true` |
-| `KERNEL_TIMEOUT_SECONDS` | Session timeout in seconds | `300` |
-| `KERNEL_PROFILE_NAME` | Browser profile name for persistent cookies/logins (created if it doesn't exist) | (none) |
-
-When enabled, agent-browser connects to a Kernel cloud session instead of launching a local browser. All commands work identically.
-
-**Profile Persistence:** When `KERNEL_PROFILE_NAME` is set, the profile will be created if it doesn't already exist. Cookies, logins, and session data are automatically saved back to the profile when the browser session ends, making them available for future sessions.
-
-Get your API key from the [Kernel Dashboard](https://dashboard.onkernel.com).
+This is a fork of [vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser). Changes in this fork:
+- **Stealth mode** (`--stealth` flag) — init scripts to evade bot detection
+- **Permissions API** (`set permissions` command) — grant browser permissions programmatically
 
 ## License
 
