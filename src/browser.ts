@@ -115,6 +115,7 @@ export class BrowserManager {
    */
   async getSnapshot(options?: {
     interactive?: boolean;
+    cursor?: boolean;
     maxDepth?: number;
     compact?: boolean;
     selector?: string;
@@ -145,6 +146,13 @@ export class BrowserManager {
     if (!refData) return null;
 
     const page = this.getPage();
+
+    // Check if this is a cursor-interactive element (uses CSS selector, not ARIA role)
+    // These have pseudo-roles 'clickable' or 'focusable' and a CSS selector
+    if (refData.role === 'clickable' || refData.role === 'focusable') {
+      // The selector is a CSS selector, use it directly
+      return page.locator(refData.selector);
+    }
 
     // Build locator with exact: true to avoid substring matches
     let locator: Locator;
@@ -1074,16 +1082,28 @@ export class BrowserManager {
       throw new Error('Extensions are only supported in Chromium');
     }
 
+    // allowFileAccess is only supported in Chromium
+    if (options.allowFileAccess && browserType !== 'chromium') {
+      throw new Error('allowFileAccess is only supported in Chromium');
+    }
+
     const launcher =
       browserType === 'firefox' ? firefox : browserType === 'webkit' ? webkit : chromium;
     const viewport = options.viewport ?? { width: 1280, height: 720 };
 
     // Stealth mode: add browser args to disable automation detection
     const stealthArgs = options.stealth ? ['--disable-blink-features=AutomationControlled'] : [];
+    // Build base args array with file access flags if enabled
+    // --allow-file-access-from-files: allows file:// URLs to read other file:// URLs via XHR/fetch
+    // --allow-file-access: allows the browser to access local files in general
+    const fileAccessArgs = options.allowFileAccess
+      ? ['--allow-file-access-from-files', '--allow-file-access']
+      : [];
+    const extraArgs = [...stealthArgs, ...fileAccessArgs];
     const mergedArgs = options.args
-      ? [...options.args, ...stealthArgs]
-      : stealthArgs.length > 0
-        ? stealthArgs
+      ? [...extraArgs, ...options.args]
+      : extraArgs.length > 0
+        ? extraArgs
         : undefined;
 
     let context: BrowserContext;
@@ -1091,7 +1111,7 @@ export class BrowserManager {
       // Extensions require persistent context in a temp directory
       const extPaths = options.extensions!.join(',');
       const session = process.env.AGENT_BROWSER_SESSION || 'default';
-      // Combine extension args with custom args
+      // Combine extension args with custom args and file access args
       const extArgs = [`--disable-extensions-except=${extPaths}`, `--load-extension=${extPaths}`];
       const allArgs = mergedArgs ? [...extArgs, ...mergedArgs] : extArgs;
       context = await launcher.launchPersistentContext(
@@ -1118,6 +1138,9 @@ export class BrowserManager {
         args: mergedArgs,
         viewport,
         extraHTTPHeaders: options.headers,
+        userAgent: options.userAgent,
+        ...(options.proxy && { proxy: options.proxy }),
+        ignoreHTTPSErrors: options.ignoreHTTPSErrors ?? false,
       });
       this.isPersistentContext = true;
     } else {
